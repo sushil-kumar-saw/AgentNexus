@@ -1,13 +1,8 @@
-# AutoDataLab++: Teaching a 1.5B LLM to Orchestrate a Multi-Agent Office
+# AgentNexus: Teaching a 1.5B LLM to Orchestrate a Multi-Agent Office
 
-**Author:** Ajeet Kumar ([@ajeetkartikay](https://github.com/ajeetkartikay))
-**Team:** Peaky Blinders — built with [Sai Kamal Nannuri](https://github.com/Uchihakamal1816)
+**Author:** Sushil Kumar Saw
+**Repository:** https://github.com/sushil-kumar-saw/AgentNexus
 
-**Portfolio repo:** https://github.com/ajeetkartikay/AutoDataLab-meta
-**Original team repo:** https://github.com/Uchihakamal1816/AutoDataLab-
-**Live demo:** https://uchihamadara1816-autodatalab2-0.hf.space/ui/
-
-> *This blog covers the full team's work. My specific contributions are listed in the [README](./README.md#my-contributions).*
 
 ## TL;DR
 
@@ -127,11 +122,12 @@ Across all 6 evidence rollouts, average terminal score with RAG OFF is 0.8824 an
 
 ## Try It
 
-Smoke-test the live deployment by hitting /health on https://uchihamadara1816-autodatalab2-0.hf.space — should return status healthy.
+Smoke-test the live deployment by hitting /health on https://agentnexus.hf.space — should return status healthy.
 
 Run an episode by POSTing to /reset with a JSON body containing task and use_rag fields.
 
-Or open the office UI directly at https://uchihamadara1816-autodatalab2-0.hf.space/ui/. Pick MLP trained CoS policy on crisis_brief with RAG on. Watch the four boxes light up in order.
+Or open the office UI directly at https://agentnexus.hf.space/ui/. Pick MLP trained CoS policy on crisis_brief with RAG on. Watch the four boxes light up in order.
+
 
 ## Acknowledgments
 
