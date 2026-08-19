@@ -1,5 +1,5 @@
 spec_version: 1
-name: autodatalab_plus
+name: agentnexus
 type: space
 runtime: fastapi
 app: server.app:app

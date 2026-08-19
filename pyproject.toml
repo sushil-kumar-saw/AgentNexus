@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 # runs on Colab where torch is pre-installed. To run training locally:
 #   pip install torch>=2.0.0
 [project]
-name = "autodatalab-plus"
+name = "agentnexus"
 version = "0.1.0"
-description = "AutoDataLab++ multi-agent company simulation for OpenEnv"
+description = "AgentNexus multi-agent company simulation for OpenEnv"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
