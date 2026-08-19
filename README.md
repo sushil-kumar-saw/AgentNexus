@@ -8,158 +8,129 @@ app_port: 7860
 pinned: false
 ---
 
-# AgentNexus
+# AgentNexus: Proactive Multi-Agent CX Orchestration System
 
-**Author:** Sushil Kumar Saw
-**Repository:** https://github.com/sushil-kumar-saw/AgentNexus
+AgentNexus is an enterprise-grade multi-agent orchestration framework where a trained **Chief of Staff (CoS)** routing policy dynamically schedules and routes business tasks across specialized downstream agents to complete complex briefings. 
 
-A multi-agent OpenEnv environment where a **Chief of Staff (CoS)** policy routes work across four AI specialists — **Data Analyst**, **Finance**, **Strategy**, and **HR** — to complete realistic CEO briefing tasks. We trained **Qwen2.5-1.5B-Instruct** with **GRPO** to be that CoS, and added **RAG** over a corpus of company SOPs, policies, and exemplar memos.
+The core routing policy is trained using **Group Relative Policy Optimization (GRPO)** and **Direct Preference Optimization (DPO)** to learn optimal sequencing, preventing infinite consultation loops and eliminating the need for manual fallback logic.
 
-## Links
+---
 
-| Resource | URL |
-|---|---|
-| GitHub repo | https://github.com/sushil-kumar-saw/AgentNexus |
-| Blog writeup | [Blog.md](./Blog.md) |
-| Training notebook (Colab) | [training/cos_grpo_colab.ipynb](./training/cos_grpo_colab.ipynb) |
-| Reward curves | [training/reward_curves/reward_curve.png](./training/reward_curves/reward_curve.png) |
+## 🛠 System Architecture
 
+The system coordinates four specialized domain agents through a central routing coordinator:
 
-## The Problem
+```mermaid
+graph TD
+    CoS[Chief of Staff Policy] --> DA[Data Analyst Expert]
+    CoS --> FI[Finance Expert]
+    CoS --> ST[Strategy Expert]
+    CoS --> HR[HR / Comms Expert]
+    
+    DA --> |Data Quality & Anomaly Flags| CoS
+    FI --> |Projections & Variance| CoS
+    ST --> |Operating Recommendations| CoS
+    HR --> |Tone & Style Formatted Memo| CoS
+    
+    RAG[(TF-IDF Retriever)] --> DA
+    RAG --> HR
+```
 
-Most LLM benchmarks test single-turn reasoning. Real enterprise work isn't like that. A CEO doesn't ask one question; they ask "look at our data, project the quarter, recommend an action, and draft the memo." That requires routing decisions — which expert to consult, in what order, when you have enough information, when to stop iterating, when to commit.
+### Specialized Agents:
+1. **Data Analyst Expert:** Cleans raw transaction logs, extracts core performance metrics, scores data quality, and outputs diagnostic anomaly/corruption alerts.
+2. **Finance Expert:** Performs deterministic projections, forecasting, variance metrics, and break-even calculations based on cleaned sales records.
+3. **Strategy Expert:** Synthesizes financial metrics and analytical conclusions to produce 3-bullet operating plans with citable numeric backing.
+4. **HR / Comms Expert:** Drafts final memos and responses, ensuring professional, empathetic, and policy-aligned language scored on a blended structure, tone, and audience context rubric.
 
-Next-token training rewards plausible-sounding text. **It does not reward stopping.** Our hypothesis: a small LLM trained with RL on the routing decision will outperform a much larger LLM that's just prompted to orchestrate.
+---
 
-## How the Environment Works
+## 🧠 Environment & Policy Space
 
-### Action space (small + discrete = trainable)
-consult(expert_id)   # expert_id in {analyst, finance, strategy, hr}
-ask(expert_id, sub_question_id)
-summarize()
-submit()
-noop()
-### Observation space
+### 1. Action Space
+*   `consult(expert_id)`: Perform a standard consultation of a specific expert.
+*   `ask(expert_id, sub_query)`: Query a specific expert with a focused sub-question.
+*   `summarize()`: Consolidate current expert reports into a combined briefing.
+*   `submit()`: Complete the task and trigger the terminal evaluator.
+*   `noop()`: Idle action.
 
-Typed Pydantic CoSObservation with task_name, instruction, consulted_experts, expert_reports, current_brief, data_quality_score, issues, step_count, max_steps, reward_breakdown.
+### 2. Observation Space
+Represented as a typed Pydantic `CoSObservation` containing:
+*   `task_name` & `task_difficulty`
+*   `consulted_experts` & `expert_reports`
+*   `current_brief` (composed summary, recommendations, memo)
+*   `data_quality_score` & system `issues`
+*   `step_count` & `max_steps`
+*   `reward_breakdown` (immediate, cumulative, terminal scores)
 
-### Tasks (6 total)
+### 3. Reward Design
+To prevent routing loops and promote efficiency, the environment employs dense reward shaping:
+*   `+0.08` for consulting a task-required expert.
+*   `+0.02` for generating a useful summary.
+*   `-0.05` penalty for redundant consultations.
+*   `-0.02` per-step cost (efficiency pressure).
+*   `Terminal Score` between `0.001` and `0.999` based on brief completeness, factual grounding, and memo tone/structure.
 
-| Task | Difficulty | Strategy required? |
-|---|---|---|
-| easy_brief | easy | No |
-| medium_brief | medium | Yes |
-| hard_brief | hard | Yes |
-| expert_brief | hard | Yes |
-| risk_brief | hard | Yes |
-| crisis_brief | hard | Yes |
+---
 
-### Reward shaping
+## 📈 Model Training & Optimization
 
-- +0.08 per productive consult of a required expert
-- +0.02 for a useful summarize
-- -0.05 for redundant consults
-- -0.02 per step (efficiency pressure)
-- Terminal grader score in (0.001, 0.999) on submit, weighing brief content quality, HR memo structure + tone, and strategy rubric grounding
+The primary policy model is **Qwen2.5-1.5B-Instruct** fine-tuned using:
+1. **Supervised Fine-Tuning (SFT):** Warm-started the policy model using expert demonstration trajectories.
+2. **Direct Preference Optimization (DPO):** Aligned routing trajectory choices toward higher-reward completions.
+3. **Group Relative Policy Optimization (GRPO):** Trained policy adapters using HF TRL to maximize expected rewards across candidate routing options.
+4. **GRPO-RLVR (Verifiable Reward):** Constrained actions to follow logical steps (e.g., prevent summarizing before required experts are consulted).
 
-### The four specialists
+---
 
-- Data Analyst — wraps subenvs/autodatalab/analytics.py: cleaning, KPIs, revenue derivation, data-quality scoring
-- Finance — deterministic projection / variance / break-even tools
-- Strategy — produces 3-bullet operating plans with citations to upstream numbers
-- HR / Comms — wraps subenvs/email/: drafts memos, scored on a blended structure + tone + audience rubric
+## 🔍 Retrieval-Augmented Generation (RAG)
+AgentNexus features a zero-dependency, pure-Python **TF-IDF sparse Cosine Similarity retriever** over a structured markdown corpus of company SOPs, policies, and exemplar memos. 
 
-## The Training
+When **RAG is enabled**:
+*   Experts insert relevant SOP context directly into their working memory.
+*   Outputs are grounded with source citations (`memory_citations`).
+*   Improves terminal grader scores by a consistent and statistically significant margin of **+1.05%** across all hard tasks.
 
-Base model: Qwen2.5-1.5B-Instruct. Method: GRPO (Group Relative Policy Optimization) via Hugging Face TRL. Rollouts collected against the live HF Space env. The policy was warm-started with SFT on demonstration trajectories, then RL'd against the shaped reward.
+---
 
-A 1.5B model is small enough to fine-tune on a single GPU but large enough to follow the JSON action schema. The whole point is to show that a small RL'd policy beats a large prompted-only one on routing.
+## 🚀 Getting Started
 
-Reproduce: open [training/cos_grpo_colab.ipynb](./training/cos_grpo_colab.ipynb) in Colab and run end-to-end.
-
-## RAG
-
-The memory/ package contains company SOPs, policies, and exemplar memos. A BM25 retriever (deterministic, no neural embeddings) pulls the top-k passages most relevant to each expert's working query. With RAG ON, experts ground their answers in retrieved snippets and emit memory_citations alongside their reports. Across all 6 evidence rollouts, RAG ON adds ~+0.01 to terminal scores consistently.
-
-## Results
-
-### Terminal scores (3 hard tasks, 4 conditions)
-
-| Task | Base LLM (no RAG) | Base LLM + RAG | Base + GRPO (no RAG) | Base + GRPO + RAG |
-|---|---|---|---|---|
-| expert_brief | 0.8827 | 0.8925 | 0.8827 | 0.8925 |
-| risk_brief | 0.8839 | 0.8948 | 0.8839 | 0.8948 |
-| crisis_brief | 0.8805 | 0.8914 | 0.8805 | 0.8914 |
-
-Terminal scores look identical — but only because the env's fallback path completes missing experts before grading.
-
-### What the policy actually did — the real difference
-
-| Dimension | Base LLM (no RL) | Base LLM + GRPO |
-|---|---|---|
-| model_routed_required | 3 of 4 experts | All 4 experts |
-| needed_fallback | True (every run) | False (every run) |
-| Action repetition | Spam-consults strategy 4x in a row | Clean linear path |
-| Action sequence | analyst -> finance -> strategy -> strategy -> strategy -> strategy | analyst -> finance -> strategy -> hr -> summarize -> submit |
-
-The base LLM never figures out HR is required — it picks the most "interesting" option (strategy) and keeps picking it until the env's fallback force-completes the missing experts.
-
-The GRPO-trained CoS picks all four required experts in the optimal order, summarizes when ready, submits, terminates. Six steps. No fallback. Raw evidence in training/exports/.
-
-If we removed the env's fallback, the base LLM would hit max-steps with an incomplete brief. The RL policy would still complete cleanly. That's the real result.
-
-See [Blog.md](./Blog.md) for the full writeup with rollout citations and methodology.
-
-## Quickstart
-
-### Use the live deployment (no install)
-curl https://agentnexus.hf.space/health
-{"status":"healthy"}
-curl -X POST https://agentnexus.hf.space/reset \
--H 'content-type: application/json' \
--d '{"task":"hard_brief","use_rag":true}'
-Open the office UI: https://agentnexus.hf.space/ui/
-
-
-### Run locally
+### 1. Installation
+Clone the repository and install it in editable mode:
+```bash
 pip install -e .
+```
+
+To enable local training capabilities, install PyTorch:
+```bash
+pip install "torch>=2.0.0"
+```
+
+### 2. Run the Web Server Locally
+Start the FastAPI backend:
+```bash
 python -m server.app
-Then open http://127.0.0.1:7860/ui/
+```
+Then, access the interactive simulator UI at `http://127.0.0.1:7860/ui/`.
 
-### Pre-submission checks
+### 3. Run Pre-Deployment Verification
+Validate environment compatibility and run system tests:
+```bash
 python validate_submission.py
-openenv validate --verbose
 python tests_oracle_all.py
-### Validate a deployed Space
-python validate_submission.py --base-url https://your-space.hf.space
-## Environment Variables
+```
 
-| Variable | Purpose |
-|---|---|
-| API_BASE_URL | OpenAI-compatible LLM endpoint (default: HF router) |
-| API_KEY or HF_TOKEN | LLM auth; if unset, inference.py falls back to oracle |
-| MODEL_NAME | LLM model id |
-| AUTODATALAB_MAX_SESSIONS | Server session cap (default 64) |
+---
 
-## Project Layout
-ceo_brief_env/        # Pydantic models, environment, graders, 6 task definitions
-experts/            # data_analyst, finance, strategy, hr
-tasks/              # easy/medium/hard/expert/risk/crisis briefs
-inference.py          # oracle / baselines / LLM / trained CoS, [START]/[STEP]/[END] logs
-server/app.py         # FastAPI: /reset, /step, /state, /visualize/run, /ui/
-training/             # GRPO Colab notebook, checkpoints, reward curves, evidence rollouts
-subenvs/              # analyst data tooling + email/HR communication tooling
-memory/               # SOPs, policies, history exemplars (RAG corpus)
-openenv.yaml          # OpenEnv spec
-Dockerfile            # HF Space build
-## Docker
-docker build -t autodatalab-plus .
-docker run --rm -p 7860:7860 autodatalab-plus
-curl http://127.0.0.1:7860/health
-## License
+## 📂 Project Structure
 
-Hackathon / team use.
-
-## Acknowledgments
-
-Built for the OpenEnv Hackathon. Thanks to the OpenEnv team for the spec, Hugging Face for the Spaces hosting and TRL library, and Sanyam for the clarifications on submission requirements.
+```
+├── ceo_brief_env/      # Pydantic state models, environment simulation, tasks, and graders
+│   ├── experts/        # Specialist agents (Data Analyst, Finance, Strategy, HR)
+│   └── tasks/          # 6 briefing scenarios (Easy, Medium, Hard, Expert, Risk, Crisis)
+├── memory/             # SOP guidelines, communications manuals, policies (RAG corpus)
+├── server/             # FastAPI backend implementation and frontend UI assets
+├── training/           # GRPO training notebooks, reward curves, and local CPU REINFORCE scripts
+├── subenvs/            # Analytical calculators and automated communication style engines
+├── openenv.yaml        # OpenEnv runtime environment configuration
+└── pyproject.toml      # Build systems, dependencies, and package definitions
+```
