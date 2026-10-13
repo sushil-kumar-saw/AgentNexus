@@ -4,6 +4,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Backward compatibility polyfill for Pydantic v1 environments
+if not hasattr(BaseModel, "model_dump"):
+    BaseModel.model_dump = lambda self, **kwargs: self.dict(**kwargs)  # type: ignore
+if not hasattr(BaseModel, "model_dump_json"):
+    BaseModel.model_dump_json = lambda self, **kwargs: self.json(**kwargs)  # type: ignore
+
 
 class RewardBreakdown(BaseModel):
     model_config = ConfigDict(extra="forbid")

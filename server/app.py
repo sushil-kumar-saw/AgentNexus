@@ -7,6 +7,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+import typing
+if hasattr(typing, "ForwardRef") and hasattr(typing.ForwardRef, "_evaluate"):
+    _orig_eval = typing.ForwardRef._evaluate
+    def _compat_eval(self, globalns, localns, *args, **kwargs):
+        import inspect
+        sig = inspect.signature(_orig_eval)
+        kw = {}
+        if "recursive_guard" in sig.parameters:
+            kw["recursive_guard"] = kwargs.get("recursive_guard", frozenset())
+        if "type_params" in sig.parameters and args:
+            kw["type_params"] = args[0]
+        return _orig_eval(self, globalns, localns, **kw)
+    typing.ForwardRef._evaluate = _compat_eval
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
@@ -19,6 +33,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from ceo_brief_env.environment import CEOBriefEnvironment, oracle_action_for_observation, required_experts_for_task
 from ceo_brief_env.models import CoSAction, CoSObservation
+from kafka_streamer import streamer
 
 app = FastAPI(title='AutoDataLab++', version='0.1.0')
 
@@ -105,6 +120,8 @@ def reset(req: ResetRequest) -> dict:
     payload = obs.model_dump()
     payload['episode_id'] = episode_id
     payload['rag_enabled'] = bool(req.use_rag)
+    # Stream event to Kafka
+    streamer.emit_reset(episode_id=episode_id, task=req.task, use_rag=req.use_rag)
     return payload
 
 
@@ -116,6 +133,18 @@ def step(req: StepRequest) -> dict:
     obs = env.step(req.action)
     payload = obs.model_dump()
     payload['episode_id'] = req.episode_id
+    # Stream telemetry to Kafka
+    streamer.emit_step(
+        episode_id=req.episode_id,
+        step_count=obs.step_count,
+        action=req.action.model_dump(exclude_none=True),
+        reward=obs.reward,
+        done=obs.done,
+        consulted_experts=obs.consulted_experts,
+        data_quality_score=obs.data_quality_score,
+        issues=obs.issues,
+        terminal_score=obs.terminal_grader_score,
+    )
     return payload
 
 
@@ -125,6 +154,41 @@ def state(episode_id: str) -> dict:
     if env is None:
         raise HTTPException(status_code=404, detail='unknown episode_id')
     return env.state().model_dump()
+
+
+# ---------------------------------------------------------------------------
+# Kafka Diagnostics & Event Stream Endpoints (for Live Observability)
+# ---------------------------------------------------------------------------
+
+class AlertEventRequest(BaseModel):
+    source: str = "data_quality_monitor"
+    alert_type: str = "ANOMALY_DETECTED"
+    severity: str = "HIGH"
+    details: Dict[str, Any] = {}
+
+
+@app.get('/kafka/status')
+def kafka_status() -> dict:
+    """Returns Kafka broker connectivity status and diagnostics."""
+    return streamer.status()
+
+
+@app.get('/kafka/events')
+def kafka_events(limit: int = 20, topic: Optional[str] = None) -> list:
+    """Returns recent events streamed through Kafka / event bus."""
+    return streamer.get_recent_events(limit=limit, topic=topic)
+
+
+@app.post('/kafka/alert')
+def kafka_alert(req: AlertEventRequest) -> dict:
+    """Publish a proactive anomaly event to trigger agent investigations."""
+    event = streamer.emit_alert(
+        source=req.source,
+        alert_type=req.alert_type,
+        severity=req.severity,
+        details=req.details,
+    )
+    return {"status": "published", "event": event}
 
 
 # ---------------------------------------------------------------------------

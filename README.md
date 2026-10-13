@@ -92,6 +92,16 @@ When **RAG is enabled**:
 
 ---
 
+## ⚡ Event-Driven Streaming Backbone (Apache Kafka)
+AgentNexus includes a non-intrusive, dual-mode **Apache Kafka** event bus for enterprise telemetry, audit logging, and proactive triggering:
+*   **`agentnexus.episodes`**: Tracks episode lifecycle state (`EPISODE_RESET`, `SUBMIT`).
+*   **`agentnexus.telemetry`**: Streams every agent action, reward, and data-quality score for real-time observability and RL/DPO trajectory data flywheels.
+*   **`agentnexus.alerts`**: Streams anomaly and data-corruption alerts to trigger proactive CoS incident briefings.
+*   **Interactive Demo**: Run `python3 scripts/kafka_demo.py` to see the live producer and proactive consumer in action.
+*   **Interview Guide**: See [`KAFKA_INTERVIEW_GUIDE.md`](KAFKA_INTERVIEW_GUIDE.md) for full architectural diagrams, topics, and interview Q&A.
+
+---
+
 ## 🚀 Getting Started
 
 ### 1. Installation

@@ -23,6 +23,9 @@ dependencies = [
 dev = [
     "pytest>=8.2.0",
 ]
+kafka = [
+    "kafka-python>=2.0.2",
+]
 
 [project.scripts]
 server = "server.app:main"
